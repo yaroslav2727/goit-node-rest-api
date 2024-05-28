@@ -94,9 +94,14 @@ export const updateAvatar = async (req, res, next) => {
 
     const newPath = path.join(publicPath, "avatars", filename);
 
-    const image = await Jimp.read(oldPath);
-    image.resize(250, 250).write(newPath);
-    await fs.unlink(oldPath);
+    try {
+      const image = await Jimp.read(oldPath);
+      image.resize(250, 250).write(newPath);
+    } catch (error) {
+      throw HttpError(400, `Could not read file. ${error.message}`);
+    } finally {
+      await fs.unlink(oldPath);
+    }
 
     if (oldAvatarURL.includes("avatars")) {
       const oldAvatarPath = path.join(publicPath, oldAvatarURL);

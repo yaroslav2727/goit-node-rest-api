@@ -3,12 +3,15 @@ import path from "path";
 
 import HttpError from "../helpers/HttpError.js";
 
+const ALLOWED_EXTENTIONS = ["jpg", "png", "gif"];
+
 const destination = path.resolve("tmp");
 
 const storage = multer.diskStorage({
   destination,
   filename: (req, file, callback) => {
-    const extension = file.originalname.split(".").pop();
+    const arr = file.originalname.split(".");
+    const extension = arr[arr.length - 1];
     const filename = `${Date.now()}_${Math.round(Math.random() * 1e9)}.${extension}`;
     callback(null, filename);
   },
@@ -19,10 +22,13 @@ const limits = {
 };
 
 const fileFilter = (req, file, callback) => {
-  const extension = file.originalname.split(".").pop();
-  if (extension !== "jpg" && extension !== "png") {
-    return callback(HttpError(400, "Only .jpg and .png are allowed"));
+  const arr = file.originalname.split(".");
+  const extension = arr[arr.length - 1];
+
+  if (!ALLOWED_EXTENTIONS.includes(extension)) {
+    return callback(HttpError(400, `Only ${ALLOWED_EXTENTIONS} are allowed`));
   }
+
   callback(null, true);
 };
 

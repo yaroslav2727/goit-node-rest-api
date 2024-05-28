@@ -1,7 +1,14 @@
+import path from "path";
+import fs from "fs/promises";
+import gravatar from "gravatar";
+import Jimp from "jimp";
+
 import * as usersService from "../services/usersServices.js";
 import HttpError from "../helpers/HttpError.js";
 import { comparePasswords } from "../helpers/hashFunctions.js";
 import { createToken } from "../helpers/jwt.js";
+
+const publicPath = path.resolve("public");
 
 export const registerUser = async (req, res, next) => {
   try {
@@ -9,8 +16,8 @@ export const registerUser = async (req, res, next) => {
     if (user) {
       throw HttpError(409, "Email in use");
     }
-
-    const result = await usersService.addUser(req.body);
+    const avatarURL = gravatar.url(req.body.email, { d: "retro" });
+    const result = await usersService.addUser({ ...req.body, avatarURL });
     const { email, subscription } = result;
     res.status(201).json({ user: { email, subscription } });
   } catch (error) {
@@ -70,6 +77,39 @@ export const updateSubscription = async (req, res, next) => {
     const { _id, email } = req.user;
     const newUser = await usersService.updateUserById(_id, req.body);
     res.json({ email, subscription: newUser.subscription });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      throw HttpError(400, "No file attached");
+    }
+
+    const { _id, avatarURL: oldAvatarURL } = req.user;
+
+    const { path: oldPath, filename } = req.file;
+
+    const newPath = path.join(publicPath, "avatars", filename);
+
+    const image = await Jimp.read(oldPath);
+    image.resize(250, 250).write(newPath);
+    await fs.unlink(oldPath);
+
+    if (oldAvatarURL.includes("avatars")) {
+      const oldAvatarPath = path.join(publicPath, oldAvatarURL);
+      try {
+        await fs.unlink(oldAvatarPath);
+      } catch (error) {}
+    }
+
+    const avatarURL = path.join("/avatars", filename);
+
+    const newUser = await usersService.updateUserById(_id, { avatarURL });
+
+    res.json({ avatarURL: newUser.avatarURL });
   } catch (error) {
     next(error);
   }

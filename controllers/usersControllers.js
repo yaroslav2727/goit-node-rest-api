@@ -2,11 +2,13 @@ import path from "path";
 import fs from "fs/promises";
 import gravatar from "gravatar";
 import Jimp from "jimp";
+import { nanoid } from "nanoid";
 
 import * as usersService from "../services/usersServices.js";
 import HttpError from "../helpers/HttpError.js";
 import { comparePasswords } from "../helpers/hashFunctions.js";
 import { createToken } from "../helpers/jwt.js";
+import { sendEmail, sendVerificationEmail } from "../helpers/sendEmail.js";
 
 const publicPath = path.resolve("public");
 
@@ -16,10 +18,52 @@ export const registerUser = async (req, res, next) => {
     if (user) {
       throw HttpError(409, "Email in use");
     }
+    const verificationToken = nanoid();
     const avatarURL = gravatar.url(req.body.email, { d: "retro" });
-    const result = await usersService.addUser({ ...req.body, avatarURL });
+    const result = await usersService.addUser({ ...req.body, avatarURL, verificationToken });
     const { email, subscription } = result;
+
+    await sendVerificationEmail(email, verificationToken);
+
     res.status(201).json({ user: { email, subscription } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyUser = async (req, res, next) => {
+  try {
+    const { verificationToken } = req.params;
+    const user = await usersService.findUser({ verificationToken });
+    if (!user) {
+      throw HttpError(404, "User not found");
+    }
+
+    await usersService.updateUserById(user._id, {
+      verified: true,
+      verificationToken: null,
+    });
+
+    res.status(200).json({ message: "Verification successful" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resendVerification = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const user = await usersService.findUser({ email });
+    if (!user) {
+      throw HttpError(404, "User not found");
+    }
+    if (user.verified) {
+      throw HttpError(400, "Verification has already been passed");
+    }
+
+    await sendVerificationEmail(user.email, user.verificationToken);
+
+    res.status(200).json({ message: "Verification email sent" });
   } catch (error) {
     next(error);
   }
@@ -35,6 +79,9 @@ export const loginUser = async (req, res, next) => {
     const isCorrectPassword = await comparePasswords(password, user.password);
     if (!isCorrectPassword) {
       throw HttpError(401, "Email or password is wrong");
+    }
+    if (!user.verified) {
+      throw HttpError(401, "Email not verified");
     }
     const token = createToken({ id: user._id });
     await usersService.updateUserById(user._id, { token });

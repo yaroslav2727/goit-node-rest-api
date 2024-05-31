@@ -26,6 +26,18 @@ const userSchema = new Schema(
       type: String,
       required: true,
     },
+    verified: {
+      type: Boolean,
+      default: false,
+    },
+    verificationToken: {
+      type: Schema.Types.Mixed,
+      validate: {
+        validator: function (value) {
+          return typeof value === "string" || value === null;
+        },
+      },
+    },
   },
   { versionKey: false, timestamps: true }
 );
